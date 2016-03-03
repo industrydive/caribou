@@ -14,7 +14,13 @@ import glob
 import imp
 import os.path
 import sqlite3
+try:
+    import py2neo
+except:
+    pass # not running neo4j option
 import traceback
+import ConfigParser
+import sys
 
 # statics
 
@@ -109,7 +115,7 @@ class Migration(object):
     def __repr__(self):
         return 'Migration(%s)' % self.filename
 
-class Database(object):
+class SQLiteDatabase(object):
 
     def __init__(self, db_url):
         self.db_url = db_url
@@ -158,7 +164,7 @@ class Database(object):
                 break
             migration.downgrade(self.conn)
             next_version = 0
-            # if an earlier migration exists, set the db version to 
+            # if an earlier migration exists, set the db version to
             # its version number
             if i < len(migrations) - 1:
                 next_migration = migrations[i + 1]
@@ -190,6 +196,76 @@ class Database(object):
 
     def __repr__(self):
         return 'Database("%s")' % self.db_url
+
+class Neo4JDatabase(object):
+
+    def __init__(self, db_url):
+        self.db_url = db_url
+        self.conn = py2neo.Graph(db_url)
+
+    def close(self):
+        pass
+
+    def is_version_controlled(self, *args, **kwargs):
+        result = self.execute("MATCH (n:Migration) return count(n)")
+        return bool(result[0][0])
+
+    def execute(self, stmt, *args, **kwargs):
+        return self.conn.cypher.execute(stmt, *args, **kwargs)
+
+    def get_version(self):
+        result = self.execute("MATCH (n:Migration) RETURN n.version ORDER BY n.created DESC LIMIT 1")
+        return result[0][0] if result else 0
+
+    def update_version(self, version):
+        tx = self.conn.cypher.begin()
+        tx.append("MERGE (n:Migration) SET n.version={v}, n.updated = TIMESTAMP()", v=version)
+        tx.commit()
+
+    def __repr__(self):
+        return 'Database("%s")' % self.db_url
+
+    def initialize_version_control(self):
+        self.execute("CREATE (n:Migration)")
+
+    def upgrade(self, migrations, target_version=None):
+        if target_version:
+            _assert_migration_exists(migrations, target_version)
+
+        migrations.sort(key=lambda x: x.get_version())
+        database_version = self.get_version()
+
+        for migration in migrations:
+            current_version = migration.get_version()
+            if current_version <= database_version:
+                continue
+            if target_version and current_version > target_version:
+                break
+            migration.upgrade(self.conn)
+            new_version = migration.get_version()
+            self.update_version(new_version)
+
+    def downgrade(self, migrations, target_version):
+        if target_version not in (0, '0'):
+            _assert_migration_exists(migrations, target_version)
+
+        migrations.sort(key=lambda x: x.get_version(), reverse=True)
+        database_version = self.get_version()
+
+        for i, migration in enumerate(migrations):
+            current_version = migration.get_version()
+            if current_version > database_version:
+                continue
+            if current_version <= target_version:
+                break
+            migration.downgrade(self.conn)
+            next_version = 0
+            # if an earlier migration exists, set the db version to
+            # its version number
+            if i < len(migrations) - 1:
+                next_migration = migrations[i + 1]
+                next_version = next_migration.get_version()
+            self.update_version(next_version)
 
 def _assert_migration_exists(migrations, version):
     if version not in (m.get_version() for m in migrations):
@@ -269,3 +345,13 @@ def downgrade(connection):
     # add your downgrade step here
     pass
 """
+
+# get config
+try:
+    # read a caribou.cfg file and nab the backend from it
+    config = ConfigParser.RawConfigParser()
+    config.read(('caribou.cfg'))
+    Database = getattr(sys.modules[__name__], config.get('Caribou', 'backend'))
+except:
+    # default to SQLiteDatabase
+    Database = SQLiteDatabase
