@@ -20,6 +20,10 @@ Example
 Here is a simple example illustrating how to use Caribou to manage your SQLite
 schema:
 
+#### Set up Config
+
+Create a `caribou.cfg` file that contains defaults for your database connection and migration directory. See `caribou.cfg.example` for an example.
+
 #### Create a Migration
 
 Use Caribou's command line tool to create your first migration:
