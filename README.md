@@ -5,13 +5,14 @@ Caribou SQLite Migrations
     <img src="http://imgur.com/DySrz.jpg" alt="Caribou" />
 </div>
 
-Caribou is a small, simple [SQLite][sqlite] database [migrations][rails] 
+Caribou is a small, simple [SQLite][sqlite] or [Neo4J][neo4j] database [migrations][rails] 
 library for [Python][python], built primarily to manage the evoluton of client
 side databases over multiple releases of an application.
 
   [rails]:http://guides.rubyonrails.org/migrations.html 
   [python]: http://python.org/
-  [sqlite]: http://sqlite.ord
+  [sqlite]: http://sqlite.org
+  [neo4j]: http://neo4j.com
 
 Example
 -------
