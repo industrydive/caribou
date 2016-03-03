@@ -9,3 +9,6 @@ README.html
 *.sqlite*
 *.db
 .coverage*
+caribou.cfg
+migrations/
+.idea/
