@@ -115,24 +115,32 @@ class Migration(object):
     def __repr__(self):
         return 'Migration(%s)' % self.filename
 
-class SQLiteDatabase(object):
+class BaseDatabase(object):
+    """
+    BaseDatabase object other Database backends should derive from.
+    Specifies logic organizing instances of the Migrations class to choose how to up/downgrade.
+    Expects subclasses to contain update_version and get_version methods.
+    """
 
-    def __init__(self, db_url):
-        self.db_url = db_url
-        self.conn = sqlite3.connect(db_url)
+    def update_version(self, new_version):
+        raise NotImplementedError("Subclass must specify how to upgrade migration table.")
 
-    def close(self):
-        self.conn.close()
+    def get_version(self):
+        raise NotImplementedError("Subclass must specify how to determine current database version.")
 
     def is_version_controlled(self):
-        sql = """select *
-                   from sqlite_master
-                  where type = 'table'
-                    and name = :1"""
-        with execute(self.conn, sql, [VERSION_TABLE]) as cursor:
-            return bool(cursor.fetchall())
+        raise NotImplementedError("Subclass must specify how to determine if schema to track migrations exists.")
+
+    def initialize_version_control(self):
+        raise NotImplementedError("Subclass must specify how to initialize schema changes required to track migrations.")
 
     def upgrade(self, migrations, target_version=None):
+        """
+        Upgrade a database to the most recent version or a target version.
+        :param migrations: All Migration instances.
+        :param target_version: Number version to migrate up to.
+        :return:
+        """
         if target_version:
             _assert_migration_exists(migrations, target_version)
 
@@ -150,6 +158,12 @@ class SQLiteDatabase(object):
             self.update_version(new_version)
 
     def downgrade(self, migrations, target_version):
+        """
+        Downgrade a database to a target version.
+        :param migrations: All Migration instances.
+        :param target_version: Number version to migrate down to.
+        :return:
+        """
         if target_version not in (0, '0'):
             _assert_migration_exists(migrations, target_version)
 
@@ -170,6 +184,26 @@ class SQLiteDatabase(object):
                 next_migration = migrations[i + 1]
                 next_version = next_migration.get_version()
             self.update_version(next_version)
+
+    def __repr__(self):
+        return 'Database("%s")' % self.db_url
+
+class SQLiteDatabase(BaseDatabase):
+
+    def __init__(self, db_url):
+        self.db_url = db_url
+        self.conn = sqlite3.connect(db_url)
+
+    def close(self):
+        self.conn.close()
+
+    def is_version_controlled(self):
+        sql = """select *
+                   from sqlite_master
+                  where type = 'table'
+                    and name = :1"""
+        with execute(self.conn, sql, [VERSION_TABLE]) as cursor:
+            return bool(cursor.fetchall())
 
     def get_version(self):
         """ Return the database's version, or None if it is not under version
@@ -194,10 +228,11 @@ class SQLiteDatabase(object):
             self.conn.execute(sql)
             self.conn.execute('insert into %s values (0)' % VERSION_TABLE)
 
-    def __repr__(self):
-        return 'Database("%s")' % self.db_url
-
-class Neo4JDatabase(object):
+class Neo4JDatabase(BaseDatabase):
+    """
+    Specify a Neo4JDatabase defining migration tracking-related cypher
+    Assumes there are no nodes in target database whose label is :Migration
+    """
 
     def __init__(self, db_url):
         self.db_url = db_url
@@ -222,50 +257,8 @@ class Neo4JDatabase(object):
         tx.append("MERGE (n:Migration) SET n.version={v}, n.updated = TIMESTAMP()", v=version)
         tx.commit()
 
-    def __repr__(self):
-        return 'Database("%s")' % self.db_url
-
     def initialize_version_control(self):
         self.execute("CREATE (n:Migration)")
-
-    def upgrade(self, migrations, target_version=None):
-        if target_version:
-            _assert_migration_exists(migrations, target_version)
-
-        migrations.sort(key=lambda x: x.get_version())
-        database_version = self.get_version()
-
-        for migration in migrations:
-            current_version = migration.get_version()
-            if current_version <= database_version:
-                continue
-            if target_version and current_version > target_version:
-                break
-            migration.upgrade(self.conn)
-            new_version = migration.get_version()
-            self.update_version(new_version)
-
-    def downgrade(self, migrations, target_version):
-        if target_version not in (0, '0'):
-            _assert_migration_exists(migrations, target_version)
-
-        migrations.sort(key=lambda x: x.get_version(), reverse=True)
-        database_version = self.get_version()
-
-        for i, migration in enumerate(migrations):
-            current_version = migration.get_version()
-            if current_version > database_version:
-                continue
-            if current_version <= target_version:
-                break
-            migration.downgrade(self.conn)
-            next_version = 0
-            # if an earlier migration exists, set the db version to
-            # its version number
-            if i < len(migrations) - 1:
-                next_migration = migrations[i + 1]
-                next_version = next_migration.get_version()
-            self.update_version(next_version)
 
 def _assert_migration_exists(migrations, version):
     if version not in (m.get_version() for m in migrations):
