@@ -27,6 +27,7 @@ try:
     config.read('caribou.cfg')
     database_from_config = config.get("Caribou", 'db_url')
     migration_dir_from_config = config.get("Caribou", "migration_directory")
+    database_backend = getattr('caribou', config.get("Caribou", "backend"))
 except:
     database_from_config = 'file:data.db'
     migration_dir_from_config = './migrations'
@@ -48,38 +49,38 @@ def create_migration_command(args):
     Console.info("created migration %s" % path)
 
 def print_version_command(args):
-    db_path =  args.database_path
-    version = caribou.get_version(db_path)
-    msg = 'the db [%s] is not under version control' % db_path
+    database = args.database_backend(args.database_path)
+    version = caribou.get_version(database)
+    msg = 'the db [%s] is not under version control' % database
     if version:
-        msg = 'the db [%s] is at version %s' % (db_path, version)
+        msg = 'the db [%s] is at version %s' % (database, version)
     Console.info(msg)
 
 def upgrade_db_command(args):
-    db_path = args.database_path
+    database = args.database_backend(args.database_path)
     migration_dir = args.migration_dir
     version = args.version
-    msg = 'upgrading db [%s] to most recent version' % db_path
+    msg = 'upgrading db [%s] to most recent version' % database
     if version:
-        msg = 'upgrading db [%s] to version [%s]' % (db_path, version)
+        msg = 'upgrading db [%s] to version [%s]' % (database, version)
     Console.info(msg)
-    caribou.upgrade(db_path, migration_dir, version)
-    new_version = caribou.get_version(db_path)
+    caribou.upgrade(database, migration_dir, version)
+    new_version = caribou.get_version(database)
     if version:
         assert new_version == version
     msg = "upgraded [%s] successfully to version [%s]" % (
-                                    db_path, new_version)
+                                    database, new_version)
     Console.info(msg)
 
 def downgrade_db_command(args):
-    db_path = args.database_path
     migration_dir = args.migration_dir
     version = args.version
-    msg = 'downgrading db [%s] to version [%s]' % (db_path, version)
+    database = args.database_backend(args.database_path)
+    msg = 'downgrading db [%s] to version [%s]' % (database, version)
     Console.info(msg)
-    caribou.downgrade(db_path, migration_dir, version)
+    caribou.downgrade(database, migration_dir, version)
     msg = "downgraded [%s] successfully to version [%s]" % (
-                                db_path, version)
+                                database, version)
     Console.info(msg)
 
 def list_migrations_command(args):

@@ -192,7 +192,11 @@ class SQLiteDatabase(BaseDatabase):
 
     def __init__(self, db_url):
         self.db_url = db_url
-        self.conn = sqlite3.connect(db_url)
+        self.conn = self.connect()
+        
+    def connect(self):
+        self.conn = sqlite3.connect(self.db_url)
+        return self
 
     def close(self):
         self.conn.close()
@@ -273,32 +277,31 @@ def load_migrations(directory):
     migration_files = glob.glob(wildcard)
     return [Migration(f) for f in migration_files]
    
-def upgrade(db_url, migration_dir, version=None):
+def upgrade(database, migration_dir, version=None):
     """ Upgrade the given database with the migrations contained in the
         migrations directory. If a version is not specified, upgrade
         to the most recent version.
     """
-    with contextlib.closing(Database(db_url)) as db:
-        db = Database(db_url)
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
             db.initialize_version_control()
         migrations = load_migrations(migration_dir)
         db.upgrade(migrations, version)
 
-def downgrade(db_url, migration_dir, version):
+def downgrade(database, migration_dir, version):
     """ Downgrade the database to the given version with the migrations
         contained in the given migration directory.
     """
-    with contextlib.closing(Database(db_url)) as db:
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
-            msg = "The database %s is not version controlled." % (db_url)
+            msg = "The database %s is not version controlled." % (database.db_url)
             raise Error(msg)
         migrations = load_migrations(migration_dir)
         db.downgrade(migrations, version)
 
-def get_version(db_url):
+def get_version(database):
     """ Return the migration version of the given database. """
-    with contextlib.closing(Database(db_url)) as db:
+    with contextlib.closing(database.connect()) as db:
         return db.get_version()
 
 def create_migration(name, directory=None):
@@ -338,13 +341,3 @@ def downgrade(connection):
     # add your downgrade step here
     pass
 """
-
-# get config
-try:
-    # read a caribou.cfg file and nab the backend from it
-    config = ConfigParser.RawConfigParser()
-    config.read(('caribou.cfg'))
-    Database = getattr(sys.modules[__name__], config.get('Caribou', 'backend'))
-except:
-    # default to SQLiteDatabase
-    Database = SQLiteDatabase
