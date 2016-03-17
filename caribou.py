@@ -66,20 +66,6 @@ def transaction(conn):
         msg = "Error in transaction: %s" % traceback.format_exc()
         raise Error(msg)
 
-@contextlib.contextmanager
-def close_if_we_can(conn):
-    """
-    Close the connection if it has a close method. Since we support backends whose API do not provide
-    conn.close() methods, using this instead of contextlib.close
-    :param conn: Connection to a database; result of Database.connect()
-    :return:
-    """
-    try:
-        yield
-        conn.close()
-    except AttributeError:
-        pass
-
 def has_method(an_object, method_name):
     return hasattr(an_object, method_name) and \
                     callable(getattr(an_object, method_name))
@@ -256,6 +242,9 @@ class Neo4JDatabase(BaseDatabase):
         self.db_url = db_url
         self.conn = py2neo.Graph(db_url)
 
+    def close(self):
+        pass
+
     def is_version_controlled(self, *args, **kwargs):
         result = self.execute("MATCH (n:Migration) return count(n)")
         return bool(result[0][0])
@@ -275,9 +264,6 @@ class Neo4JDatabase(BaseDatabase):
     def initialize_version_control(self):
         self.execute("CREATE (n:Migration)")
 
-    def connect(self):
-        return self.conn
-
 def _assert_migration_exists(migrations, version):
     if version not in (m.get_version() for m in migrations):
         raise Error('No migration with version %s exists.' % version)
@@ -296,7 +282,7 @@ def upgrade(database, migration_dir, version=None):
         migrations directory. If a version is not specified, upgrade
         to the most recent version.
     """
-    with close_if_we_can(database.connect()) as db:
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
             db.initialize_version_control()
         migrations = load_migrations(migration_dir)
@@ -306,7 +292,7 @@ def downgrade(database, migration_dir, version):
     """ Downgrade the database to the given version with the migrations
         contained in the given migration directory.
     """
-    with close_if_we_can(database.connect()) as db:
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
             msg = "The database %s is not version controlled." % (database.db_url)
             raise Error(msg)
@@ -315,7 +301,7 @@ def downgrade(database, migration_dir, version):
 
 def get_version(database):
     """ Return the migration version of the given database. """
-    with close_if_we_can(database.connect()) as db:
+    with contextlib.closing(database.connect()) as db:
         return db.get_version()
 
 def create_migration(name, directory=None):
