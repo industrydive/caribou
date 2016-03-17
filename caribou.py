@@ -264,6 +264,9 @@ class Neo4JDatabase(BaseDatabase):
     def initialize_version_control(self):
         self.execute("CREATE (n:Migration)")
 
+    def connect(self):
+        return self
+
 def _assert_migration_exists(migrations, version):
     if version not in (m.get_version() for m in migrations):
         raise Error('No migration with version %s exists.' % version)
