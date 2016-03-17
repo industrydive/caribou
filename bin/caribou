@@ -27,7 +27,7 @@ try:
     config.read('caribou.cfg')
     database_from_config = config.get("Caribou", 'db_url')
     migration_dir_from_config = config.get("Caribou", "migration_directory")
-    database_backend = getattr('caribou', config.get("Caribou", "backend"))
+    database_backend = getattr(caribou, config.get("Caribou", "backend"))
 except:
     database_from_config = 'file:data.db'
     migration_dir_from_config = './migrations'
@@ -49,7 +49,7 @@ def create_migration_command(args):
     Console.info("created migration %s" % path)
 
 def print_version_command(args):
-    database = args.database_backend(args.database_path)
+    database = database_backend(args.database_path)
     version = caribou.get_version(database)
     msg = 'the db [%s] is not under version control' % database
     if version:
@@ -57,7 +57,7 @@ def print_version_command(args):
     Console.info(msg)
 
 def upgrade_db_command(args):
-    database = args.database_backend(args.database_path)
+    database = database_backend(args.database_path)
     migration_dir = args.migration_dir
     version = args.version
     msg = 'upgrading db [%s] to most recent version' % database
@@ -75,7 +75,7 @@ def upgrade_db_command(args):
 def downgrade_db_command(args):
     migration_dir = args.migration_dir
     version = args.version
-    database = args.database_backend(args.database_path)
+    database = database_backend(args.database_path)
     msg = 'downgrading db [%s] to version [%s]' % (database, version)
     Console.info(msg)
     caribou.downgrade(database, migration_dir, version)
