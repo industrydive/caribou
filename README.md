@@ -5,19 +5,24 @@ Caribou SQLite Migrations
     <img src="http://imgur.com/DySrz.jpg" alt="Caribou" />
 </div>
 
-Caribou is a small, simple [SQLite][sqlite] database [migrations][rails] 
+Caribou is a small, simple [SQLite][sqlite] or [Neo4J][neo4j] database [migrations][rails] 
 library for [Python][python], built primarily to manage the evoluton of client
 side databases over multiple releases of an application.
 
   [rails]:http://guides.rubyonrails.org/migrations.html 
   [python]: http://python.org/
-  [sqlite]: http://sqlite.ord
+  [sqlite]: http://sqlite.org
+  [neo4j]: http://neo4j.com
 
 Example
 -------
 
 Here is a simple example illustrating how to use Caribou to manage your SQLite
 schema:
+
+#### Set up Config
+
+Create a `caribou.cfg` file that contains defaults for your database connection and migration directory. See `caribou.cfg.example` for an example.
 
 #### Create a Migration
 
@@ -64,13 +69,13 @@ to add logging, DDL transactions, anything at all.
 
 Caribou migrations can be run with the command line tool:
 
-    $ caribou upgrade my_sqlite_db .
+    $ caribou upgrade -db my_sqlite_db -dir .
     upgrading db [my_sqlite_db] to most recent version
     upgraded [my_sqlite_db] successfully to version [20091115140758]
 
     # if you want to revert your changes, uses the downgrade command:
 
-    $ caribou downgrade my_sqlite_db . 0
+    $ caribou downgrade -db my_sqlite_db -dir . 0
     downgrading db [my_sqlite_db] to version [0]
     downgraded [my_sqlite_db] successfully to version [0]
 

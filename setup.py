@@ -28,6 +28,9 @@ setup( name = NAME
      , py_modules=['caribou']
      , scripts=['bin/caribou']
      , install_requires=["argparse>=1.0.0"]
+     , extras_require={
+        "neo4j": ['py2neo']
+    }
      , classifiers=\
          [ 'Development Status :: 4 - Beta'
          , 'Intended Audience :: Developers'

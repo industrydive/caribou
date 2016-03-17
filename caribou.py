@@ -14,7 +14,13 @@ import glob
 import imp
 import os.path
 import sqlite3
+try:
+    import py2neo
+except:
+    pass # not running neo4j option
 import traceback
+import ConfigParser
+import sys
 
 # statics
 
@@ -109,24 +115,32 @@ class Migration(object):
     def __repr__(self):
         return 'Migration(%s)' % self.filename
 
-class Database(object):
+class BaseDatabase(object):
+    """
+    BaseDatabase object other Database backends should derive from.
+    Specifies logic organizing instances of the Migrations class to choose how to up/downgrade.
+    Expects subclasses to contain update_version and get_version methods.
+    """
 
-    def __init__(self, db_url):
-        self.db_url = db_url
-        self.conn = sqlite3.connect(db_url)
+    def update_version(self, new_version):
+        raise NotImplementedError("Subclass must specify how to upgrade migration table.")
 
-    def close(self):
-        self.conn.close()
+    def get_version(self):
+        raise NotImplementedError("Subclass must specify how to determine current database version.")
 
     def is_version_controlled(self):
-        sql = """select *
-                   from sqlite_master
-                  where type = 'table'
-                    and name = :1"""
-        with execute(self.conn, sql, [VERSION_TABLE]) as cursor:
-            return bool(cursor.fetchall())
+        raise NotImplementedError("Subclass must specify how to determine if schema to track migrations exists.")
+
+    def initialize_version_control(self):
+        raise NotImplementedError("Subclass must specify how to initialize schema changes required to track migrations.")
 
     def upgrade(self, migrations, target_version=None):
+        """
+        Upgrade a database to the most recent version or a target version.
+        :param migrations: All Migration instances.
+        :param target_version: Number version to migrate up to.
+        :return:
+        """
         if target_version:
             _assert_migration_exists(migrations, target_version)
 
@@ -144,6 +158,12 @@ class Database(object):
             self.update_version(new_version)
 
     def downgrade(self, migrations, target_version):
+        """
+        Downgrade a database to a target version.
+        :param migrations: All Migration instances.
+        :param target_version: Number version to migrate down to.
+        :return:
+        """
         if target_version not in (0, '0'):
             _assert_migration_exists(migrations, target_version)
 
@@ -158,12 +178,36 @@ class Database(object):
                 break
             migration.downgrade(self.conn)
             next_version = 0
-            # if an earlier migration exists, set the db version to 
+            # if an earlier migration exists, set the db version to
             # its version number
             if i < len(migrations) - 1:
                 next_migration = migrations[i + 1]
                 next_version = next_migration.get_version()
             self.update_version(next_version)
+
+    def __repr__(self):
+        return 'Database("%s")' % self.db_url
+
+class SQLiteDatabase(BaseDatabase):
+
+    def __init__(self, db_url):
+        self.db_url = db_url
+        self.conn = self.connect()
+        
+    def connect(self):
+        self.conn = sqlite3.connect(self.db_url)
+        return self
+
+    def close(self):
+        self.conn.close()
+
+    def is_version_controlled(self):
+        sql = """select *
+                   from sqlite_master
+                  where type = 'table'
+                    and name = :1"""
+        with execute(self.conn, sql, [VERSION_TABLE]) as cursor:
+            return bool(cursor.fetchall())
 
     def get_version(self):
         """ Return the database's version, or None if it is not under version
@@ -188,8 +232,40 @@ class Database(object):
             self.conn.execute(sql)
             self.conn.execute('insert into %s values (0)' % VERSION_TABLE)
 
-    def __repr__(self):
-        return 'Database("%s")' % self.db_url
+class Neo4JDatabase(BaseDatabase):
+    """
+    Specify a Neo4JDatabase defining migration tracking-related cypher
+    Assumes there are no nodes in target database whose label is :Migration
+    """
+
+    def __init__(self, db_url):
+        self.db_url = db_url
+        self.conn = py2neo.Graph(db_url)
+
+    def close(self):
+        pass
+
+    def is_version_controlled(self, *args, **kwargs):
+        result = self.execute("MATCH (n:Migration) return count(n)")
+        return bool(result[0][0])
+
+    def execute(self, stmt, *args, **kwargs):
+        return self.conn.cypher.execute(stmt, *args, **kwargs)
+
+    def get_version(self):
+        result = self.execute("MATCH (n:Migration) RETURN n.version ORDER BY n.created DESC LIMIT 1")
+        return result[0][0] if result else 0
+
+    def update_version(self, version):
+        tx = self.conn.cypher.begin()
+        tx.append("MERGE (n:Migration) SET n.version={v}, n.updated = TIMESTAMP()", v=version)
+        tx.commit()
+
+    def initialize_version_control(self):
+        self.execute("CREATE (n:Migration)")
+
+    def connect(self):
+        return self
 
 def _assert_migration_exists(migrations, version):
     if version not in (m.get_version() for m in migrations):
@@ -204,32 +280,31 @@ def load_migrations(directory):
     migration_files = glob.glob(wildcard)
     return [Migration(f) for f in migration_files]
    
-def upgrade(db_url, migration_dir, version=None):
+def upgrade(database, migration_dir, version=None):
     """ Upgrade the given database with the migrations contained in the
         migrations directory. If a version is not specified, upgrade
         to the most recent version.
     """
-    with contextlib.closing(Database(db_url)) as db:
-        db = Database(db_url)
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
             db.initialize_version_control()
         migrations = load_migrations(migration_dir)
         db.upgrade(migrations, version)
 
-def downgrade(db_url, migration_dir, version):
+def downgrade(database, migration_dir, version):
     """ Downgrade the database to the given version with the migrations
         contained in the given migration directory.
     """
-    with contextlib.closing(Database(db_url)) as db:
+    with contextlib.closing(database.connect()) as db:
         if not db.is_version_controlled():
-            msg = "The database %s is not version controlled." % (db_url)
+            msg = "The database %s is not version controlled." % (database.db_url)
             raise Error(msg)
         migrations = load_migrations(migration_dir)
         db.downgrade(migrations, version)
 
-def get_version(db_url):
+def get_version(database):
     """ Return the migration version of the given database. """
-    with contextlib.closing(Database(db_url)) as db:
+    with contextlib.closing(database.connect()) as db:
         return db.get_version()
 
 def create_migration(name, directory=None):

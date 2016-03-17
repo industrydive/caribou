@@ -52,6 +52,7 @@ class TestCaribouMigrations(object):
     def __init__(self):
         this_dir = get_this_dir()
         self.db_url = os.path.join(this_dir, TEST_DB)
+        self.database = caribou.SQLiteDatabase(self.db_url)
         self.migrations_path = os.path.join(this_dir, MIGRATIONS_DIR)
 
     def setUp(self):
@@ -126,20 +127,19 @@ class TestCaribouMigrations(object):
 
     def test_unknown_migration(self):
         """ assert we can't target an unknown migration or non existant dirs"""
-        db_url = self.db_url
         migrations_path = self.migrations_path
         for v in ['asdf', '22341', 'asdfasdfasdf', '----']:
             for func in [caribou.upgrade, caribou.downgrade]:
                 try:
-                    func(db_url, migrations_path, v)
+                    func(self.database, migrations_path, v)
                 except caribou.Error:
                     pass
                 else:
                     assert False, 'ran an unknown migration: %s' % v
         # assert we can't run non-existant migrations
         path = '/path/to/nowhereski/whoop'
-        for func, args in [ (caribou.upgrade, (db_url, path, None))
-                          , (caribou.downgrade, (db_url, path, 0))
+        for func, args in [ (caribou.upgrade, (self.database, path, None))
+                          , (caribou.downgrade, (self.database, path, 0))
                           ]:
             try:
                 func(*args)
@@ -150,11 +150,10 @@ class TestCaribouMigrations(object):
 
     def test_migration(self):
         # assert migrations haven't been run
-        db_url = self.db_url
-        conn = sqlite3.connect(db_url)
+        conn = sqlite3.connect(self.database.db_url)
         assert not self._table_exists(conn, 'games')
         assert not self._table_exists(conn, 'players')
-        assert caribou.get_version(db_url) == None
+        assert caribou.get_version(self.database) == None
 
         # assert that the first migration has been run successfully
         # and that subsequent runs have no effect 
@@ -164,54 +163,54 @@ class TestCaribouMigrations(object):
         v3 = '20091112150205'
 
         for _ in range(3):
-            caribou.upgrade(db_url, self.migrations_path, v1)
+            caribou.upgrade(self.database, self.migrations_path, v1)
             assert self._table_exists(conn, 'games')
             assert self._table_exists(conn, 'players')
-            actual_version = caribou.get_version(self.db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == v1, '%s != %s' % (actual_version, v1)
             # make sure none of the other migrations run
             assert not self._table_exists(conn, 'scores')
 
         # run the 2nd migration
         for _ in range(3):
-            caribou.upgrade(db_url, self.migrations_path, v2)
+            caribou.upgrade(self.database, self.migrations_path, v2)
             tables = ['games', 'players', 'scores']
             assert all((self._table_exists(conn, t) for t in tables))
-            actual_version = caribou.get_version(db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == v2, '%s != %s' % (actual_version, v2)
 
         # downgrade the second migration
         for _ in range(3):
-            caribou.downgrade(db_url, self.migrations_path, v1)
+            caribou.downgrade(self.database, self.migrations_path, v1)
             assert self._table_exists(conn, 'games')
             assert self._table_exists(conn, 'players')
-            actual_version = caribou.get_version(db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == v1, '%s != %s' % (actual_version, v1)
             # make sure none of the other migrations run
             assert not self._table_exists(conn, 'scores')
 
         # upgrade all the way 
         for _ in range(3):
-            caribou.upgrade(db_url, self.migrations_path)
+            caribou.upgrade(self.database, self.migrations_path)
             tables = ['games', 'players', 'scores', 'jams']
             assert all((self._table_exists(conn, t) for t in tables))
-            actual_version = caribou.get_version(db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == v3, '%s != %s' % (actual_version, v3)
 
         # downgrade all the way 
         for _ in range(3):
-            caribou.downgrade(db_url, self.migrations_path, 0)
+            caribou.downgrade(self.database, self.migrations_path, 0)
             tables = ['games', 'players', 'scores', 'jams']
             assert all((not self._table_exists(conn, t) for t in tables))
-            actual_version = caribou.get_version(db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == '0'
 
         # upgrade all the way again
         for _ in range(3):
-            caribou.upgrade(db_url, self.migrations_path)
+            caribou.upgrade(self.database, self.migrations_path)
             tables = ['games', 'players', 'scores', 'jams']
             assert all((self._table_exists(conn, t) for t in tables))
-            actual_version = caribou.get_version(db_url)
+            actual_version = caribou.get_version(self.database)
             assert actual_version == v3, '%s != %s' % (actual_version, v3)
 
     def test_create_migration(self):

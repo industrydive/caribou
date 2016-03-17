@@ -1,0 +1,4 @@
+[Caribou]
+backend = Neo4JDatabase
+db_url = http://user:password@host:port/db/data
+migration_directory = ./migrations
