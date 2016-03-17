@@ -101,9 +101,8 @@ def main():
     # add the create migration command
     create_cmd = commands.add_parser(CREATE_CMD, help=CREATE_CMD_HELP)
     create_cmd.add_argument(NAME, help=NAME_HELP)
-    create_cmd.add_argument(DIR, DIR_LONG, help=DIR_HELP)
+    create_cmd.add_argument(DIR, DIR_LONG, help=DIR_HELP, default=migration_dir_from_config)
     create_cmd.set_defaults(func=create_migration_command)
-    create_cmd.set_defaults(migration_dir='.')
     # add the version command
     version_cmd = commands.add_parser(VERSION_CMD, help=VERSION_CMD_HELP)
     version_cmd.add_argument(DB, DB_LONG, help=DB_HELP, default=database_from_config)
