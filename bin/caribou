@@ -30,7 +30,7 @@ config.read('caribou.cfg')
 database_from_config = config.get("Caribou", 'db_url')
 migration_dir_from_config = config.get("Caribou", "migration_directory")
 database_backend = getattr(caribou, config.get("Caribou", "backend"))
-socket_timeout = config.get("Caribou", "socket_timeout")
+socket_timeout = int(config.get("Caribou", "socket_timeout"))
 
 
 class Console(object):

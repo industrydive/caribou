@@ -16,11 +16,9 @@ import os.path
 import sqlite3
 try:
     import py2neo
-except:
+except ImportError:
     pass # not running neo4j option
 import traceback
-import ConfigParser
-import sys
 
 # statics
 
@@ -247,7 +245,6 @@ class Neo4JDatabase(BaseDatabase):
         """
         self.db_url = db_url
         if socket_timeout:
-            import py2neo.packages.httpstream.http
             py2neo.packages.httpstream.http.socket_timeout = socket_timeout
         self.conn = py2neo.Graph(db_url)
 
