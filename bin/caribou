@@ -9,6 +9,7 @@ import os
 import sys
 import traceback
 import ConfigParser
+import io
 
 # 3p
 import argparse
@@ -22,10 +23,16 @@ EXIT_SUCCESS = 0
 EXIT_FAILURE = -1
 
 # config
-config = ConfigParser.SafeConfigParser(defaults={"db_url": "file:data.db",
-                                                 "migration_directory": "./migrations",
-                                                 "backend": "SQLiteDatabase",
-                                                 "socket_timeout": None})
+default_config = """
+[Caribou]
+db_url=file:data.db
+migration_directory: ./migrations
+backend: SQLiteDatabase
+socket_timeout: 30"""
+config = ConfigParser.SafeConfigParser()
+# load default config. see https://docs.python.org/2/library/configparser.html#examples
+config.readfp(io.BytesIO(default_config))
+# load local config file if we have it. will silently fail
 config.read('caribou.cfg')
 database_from_config = config.get("Caribou", 'db_url')
 migration_dir_from_config = config.get("Caribou", "migration_directory")
