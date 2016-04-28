@@ -16,11 +16,9 @@ import os.path
 import sqlite3
 try:
     import py2neo
-except:
+except ImportError:
     pass # not running neo4j option
 import traceback
-import ConfigParser
-import sys
 
 # statics
 
@@ -190,7 +188,7 @@ class BaseDatabase(object):
 
 class SQLiteDatabase(BaseDatabase):
 
-    def __init__(self, db_url):
+    def __init__(self, db_url, *args, **kwargs):
         self.db_url = db_url
         self.conn = self.connect()
         
@@ -238,8 +236,16 @@ class Neo4JDatabase(BaseDatabase):
     Assumes there are no nodes in target database whose label is :Migration
     """
 
-    def __init__(self, db_url):
+    def __init__(self, db_url, socket_timeout=None, *args, **kwargs):
+        """
+        :param db_url: URL string to pass to a py2neo.Graph instance to connect to a neo4j database
+        :type db_url: str
+        :param socket_timeout: integer in seconds of how long to ovverride py2neo's http timeout to
+        :type socket_timeout: int
+        """
         self.db_url = db_url
+        if socket_timeout:
+            py2neo.packages.httpstream.http.socket_timeout = socket_timeout
         self.conn = py2neo.Graph(db_url)
 
     def close(self):

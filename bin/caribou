@@ -9,6 +9,7 @@ import os
 import sys
 import traceback
 import ConfigParser
+import io
 
 # 3p
 import argparse
@@ -22,15 +23,22 @@ EXIT_SUCCESS = 0
 EXIT_FAILURE = -1
 
 # config
-try:
-    config = ConfigParser.RawConfigParser()
-    config.read('caribou.cfg')
-    database_from_config = config.get("Caribou", 'db_url')
-    migration_dir_from_config = config.get("Caribou", "migration_directory")
-    database_backend = getattr(caribou, config.get("Caribou", "backend"))
-except:
-    database_from_config = 'file:data.db'
-    migration_dir_from_config = './migrations'
+default_config = """
+[Caribou]
+db_url=file:data.db
+migration_directory: ./migrations
+backend: SQLiteDatabase
+socket_timeout: 30"""
+config = ConfigParser.SafeConfigParser()
+# load default config. see https://docs.python.org/2/library/configparser.html#examples
+config.readfp(io.BytesIO(default_config))
+# load local config file if we have it. will silently fail
+config.read('caribou.cfg')
+database_from_config = config.get("Caribou", 'db_url')
+migration_dir_from_config = config.get("Caribou", "migration_directory")
+database_backend = getattr(caribou, config.get("Caribou", "backend"))
+socket_timeout = int(config.get("Caribou", "socket_timeout"))
+
 
 class Console(object):
 
@@ -57,7 +65,7 @@ def print_version_command(args):
     Console.info(msg)
 
 def upgrade_db_command(args):
-    database = database_backend(args.database_path)
+    database = database_backend(args.database_path, socket_timeout)
     migration_dir = args.migration_dir
     version = args.version
     msg = 'upgrading db [%s] to most recent version' % database
@@ -75,7 +83,7 @@ def upgrade_db_command(args):
 def downgrade_db_command(args):
     migration_dir = args.migration_dir
     version = args.version
-    database = database_backend(args.database_path)
+    database = database_backend(args.database_path, socket_timeout)
     msg = 'downgrading db [%s] to version [%s]' % (database, version)
     Console.info(msg)
     caribou.downgrade(database, migration_dir, version)
